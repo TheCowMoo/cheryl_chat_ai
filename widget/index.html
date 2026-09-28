@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ascend Platform — AI Support Demo</title>
+  <style>
+    :root {
+      --brand: #4f46e5;
+      --text: #1f2937;
+      --muted: #6b7280;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%);
+      color: var(--text);
+    }
+    .hero { text-align: center; max-width: 560px; padding: 40px 24px; }
+    .badge {
+      display: inline-block;
+      background: #e0e7ff;
+      color: var(--brand);
+      font-weight: 600;
+      font-size: 13px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      margin-bottom: 20px;
+    }
+    h1 { font-size: 34px; line-height: 1.2; margin-bottom: 12px; }
+    p { color: var(--muted); font-size: 16px; line-height: 1.6; }
+    .tip { margin-top: 24px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <main class="hero">
+    <span class="badge">Ascend Platform</span>
+    <h1>AI Support Assistant</h1>
+    <p>
+      This page demonstrates the DeepSeek-powered chatbot with a local knowledge base.
+      Click the chat bubble in the bottom-right corner to start.
+    </p>
+    <p class="tip">The widget can be embedded on any website with a single &lt;script&gt; tag.</p>
+  </main>
+
+  <!-- Embed the chat widget. No data-chat-url is needed: it auto-targets its own origin. -->
+  <script src="./widget.js"></script>
+</body>
+</html>

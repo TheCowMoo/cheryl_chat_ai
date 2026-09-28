@@ -1,0 +1,71 @@
+ASCEND PLATFORM — KNOWLEDGE BASE (v1.0)
+========================================
+
+This file is the source of truth for the AI assistant. Edit it freely; the
+chatbot re-reads it on every request, so changes appear immediately without
+restarting the service.
+
+--------------------------------------------------
+1. ABOUT ASCEND PLATFORM
+--------------------------------------------------
+- Ascend Platform is an all-in-one business automation platform.
+- It helps teams manage clients, projects, invoicing, and communication.
+- Founded in 2022. Head office: 100 Innovation Drive, Suite 400.
+- Website: https://ascendplatform.site
+
+--------------------------------------------------
+2. PRODUCTS & PLANS
+--------------------------------------------------
+- Starter: $19/month. 1 user, 10 projects, email support.
+- Growth: $49/month. 5 users, unlimited projects, priority support.
+- Scale: $99/month. Unlimited users, API access, dedicated support.
+- Annual billing saves 20%.
+- A 14-day free trial is available on all plans. No credit card required.
+
+--------------------------------------------------
+3. FEATURES
+--------------------------------------------------
+- Client CRM with pipelines and notes.
+- Project boards (Kanban) with tasks and deadlines.
+- Invoicing with automatic reminders.
+- Team chat and shared inbox.
+- Reports and dashboards.
+- REST API (Scale plan only).
+
+--------------------------------------------------
+4. INTEGRATIONS
+--------------------------------------------------
+- Slack, Zapier, Google Calendar, Stripe, PayPal.
+- Webhooks for custom automations.
+
+--------------------------------------------------
+5. SECURITY & PRIVACY
+--------------------------------------------------
+- Data is encrypted in transit (TLS 1.3) and at rest (AES-256).
+- Daily automated backups retained for 30 days.
+- GDPR compliant. Data is never sold to third parties.
+
+--------------------------------------------------
+6. SUPPORT & CONTACT
+--------------------------------------------------
+- Support email: support@ascendplatform.site
+- Sales email: sales@ascendplatform.site
+- Support hours: Monday–Friday, 9:00–17:00 (UTC).
+- Average first response time: under 4 business hours.
+- Knowledge base / docs: https://ascendplatform.site/help
+
+--------------------------------------------------
+7. FAQ
+--------------------------------------------------
+Q: How do I cancel my subscription?
+A: Go to Settings > Billing > Cancel plan. Cancellation takes effect at the end
+   of the current billing period.
+
+Q: Do you offer refunds?
+A: Yes, within 14 days of first purchase for annual plans.
+
+Q: Can I upgrade or downgrade my plan?
+A: Yes, from Settings > Billing. Changes are prorated automatically.
+
+Q: Is there an API?
+A: Yes, the REST API is available on the Scale plan.
