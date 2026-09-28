@@ -172,6 +172,8 @@
         edit.onclick = function () { location.hash = '#/bot/' + bot.id; };
         var stats = el('button', 'btn btn-ghost btn-sm', 'Stats');
         stats.onclick = function () { location.hash = '#/bot/' + bot.id + '/stats'; };
+        var conv = el('button', 'btn btn-ghost btn-sm', 'Chats');
+        conv.onclick = function () { location.hash = '#/bot/' + bot.id + '/conversations'; };
         var del = el('button', 'btn btn-danger btn-sm', 'Delete');
         del.onclick = function () {
           if (confirm('Delete "' + bot.name + '" and all its messages?')) {
@@ -181,6 +183,7 @@
         actions.appendChild(embed);
         actions.appendChild(edit);
         actions.appendChild(stats);
+        actions.appendChild(conv);
         actions.appendChild(del);
         card.appendChild(actions);
         grid.appendChild(card);
@@ -265,7 +268,7 @@
     form.appendChild(chipInput);
     form.appendChild(field('Knowledge base', kb, 'The AI answers ONLY from this text.'));
     form.appendChild(field('AI personality (optional)', prompt));
-    form.appendChild(field('Webhook URL', webhook, 'Optional — when a visitor sends an email, it is POSTed here as JSON'));
+    form.appendChild(field('Webhook URL', webhook, 'Optional — the AI posts its WEBHOOK_PAYLOAD here (instruct it via the knowledge base)'));
 
     var save = el('button', 'btn btn-primary', isNew ? 'Create Chatbot' : 'Save Changes');
     save.onclick = saveFn;
@@ -462,6 +465,119 @@
     return container;
   }
 
+  // ---------- Conversations ----------
+  function fmtDate(s) {
+    if (!s) return '';
+    var d = new Date(s.replace(' ', 'T') + 'Z');
+    return isNaN(d.getTime()) ? s : d.toLocaleString();
+  }
+
+  function viewConversations(botId) {
+    var container = el('div', 'container');
+    var head = el('div', 'page-head');
+    head.innerHTML = '<div><h2>Conversations</h2><p>Visitor chats and captured leads.</p></div>';
+    var back = el('button', 'btn btn-ghost', '← Back');
+    back.onclick = function () { location.hash = '#/'; };
+    head.appendChild(back);
+    container.appendChild(head);
+
+    var allBtn = el('button', 'btn btn-primary btn-sm', 'All');
+    var leadsBtn = el('button', 'btn btn-ghost btn-sm', 'Leads only');
+    var showLeadsOnly = false;
+    var filterBar = el('div');
+    filterBar.style.cssText = 'display:flex;gap:8px;margin-bottom:16px;';
+    function setFilter(leads) {
+      showLeadsOnly = leads;
+      allBtn.className = 'btn ' + (leads ? 'btn-ghost' : 'btn-primary') + ' btn-sm';
+      leadsBtn.className = 'btn ' + (leads ? 'btn-primary' : 'btn-ghost') + ' btn-sm';
+      renderList();
+    }
+    allBtn.onclick = function () { setFilter(false); };
+    leadsBtn.onclick = function () { setFilter(true); };
+    filterBar.appendChild(allBtn);
+    filterBar.appendChild(leadsBtn);
+    container.appendChild(filterBar);
+
+    var listEl = el('div');
+    container.appendChild(listEl);
+    var conversations = [];
+
+    function renderList() {
+      listEl.innerHTML = '';
+      var shown = showLeadsOnly ? conversations.filter(function (c) { return c.lead; }) : conversations;
+      if (!shown.length) {
+        listEl.appendChild(el('div', 'empty-state', showLeadsOnly ? 'No leads captured yet.' : 'No conversations yet.'));
+        return;
+      }
+      shown.forEach(function (c) {
+        var card = el('div', 'bot-card');
+        var meta = el('div', 'bot-card-meta');
+        meta.innerHTML = '<span>' + fmtDate(c.last_at) + '</span><span>' + c.message_count + ' msgs</span>';
+        card.appendChild(meta);
+        if (c.lead) {
+          var lead = el('div', 'bot-card-assistant');
+          lead.innerHTML = '<b>Lead:</b> ' + esc(c.lead.name || '(no name)') + ' &middot; ' + esc(c.lead.email);
+          card.appendChild(lead);
+        }
+        var preview = el('div', 'muted');
+        preview.textContent = c.preview || '(no message)';
+        preview.style.fontSize = '13px';
+        card.appendChild(preview);
+        var actions = el('div', 'card-actions');
+        var view = el('button', 'btn btn-ghost btn-sm', 'View transcript');
+        view.onclick = function () { showTranscript(botId, c.conversation_id); };
+        actions.appendChild(view);
+        card.appendChild(actions);
+        listEl.appendChild(card);
+      });
+    }
+
+    api('GET', '/api/bots/' + botId + '/conversations').then(function (d) {
+      conversations = d.conversations || [];
+      renderList();
+    }).catch(function (e) { toast(e.message, false); });
+
+    return container;
+  }
+
+  function showTranscript(botId, convId) {
+    var backdrop = el('div', 'modal-backdrop');
+    var modal = el('div', 'modal');
+    modal.style.maxWidth = '640px';
+    modal.appendChild(el('h3', null, 'Conversation'));
+    var body = el('div');
+    body.style.cssText = 'max-height:60vh;overflow-y:auto;padding:8px 0;';
+    body.appendChild(el('div', 'muted', 'Loading…'));
+    modal.appendChild(body);
+    var actions = el('div', 'modal-actions');
+    var close = el('button', 'btn btn-ghost', 'Close');
+    close.onclick = function () { backdrop.remove(); };
+    actions.appendChild(close);
+    modal.appendChild(actions);
+    backdrop.appendChild(modal);
+    backdrop.onclick = function (e) { if (e.target === backdrop) backdrop.remove(); };
+    document.body.appendChild(backdrop);
+
+    api('GET', '/api/bots/' + botId + '/conversations/' + convId).then(function (d) {
+      body.innerHTML = '';
+      (d.messages || []).forEach(function (m) {
+        var row = el('div');
+        row.style.marginBottom = '10px';
+        var label = el('div', 'bot-card-assistant', (m.role === 'user' ? 'Visitor' : 'Bot') + ' · ' + fmtDate(m.created_at));
+        label.style.fontSize = '11px';
+        var content = el('div');
+        content.textContent = m.content;
+        content.style.cssText = 'margin-top:3px;padding:8px 11px;border-radius:10px;font-size:14px;line-height:1.45;white-space:pre-wrap;' + (m.role === 'user' ? 'background:#eef2ff;color:#3730a3;' : 'background:#f3f4f6;color:#1f2937;');
+        row.appendChild(label);
+        row.appendChild(content);
+        body.appendChild(row);
+      });
+    }).catch(function (e) {
+      body.innerHTML = '';
+      body.appendChild(el('div', 'muted', e.message));
+    });
+  }
+
   // ---------- Router ----------
   function render() {
     var app = document.getElementById('app');
@@ -473,6 +589,7 @@
 
     if (parts[0] === 'bot' && parts[1] === 'new') app.appendChild(viewEditor(null));
     else if (parts[0] === 'bot' && parts[2] === 'stats') app.appendChild(viewStats(parts[1]));
+    else if (parts[0] === 'bot' && parts[2] === 'conversations') app.appendChild(viewConversations(parts[1]));
     else if (parts[0] === 'bot' && parts[1]) app.appendChild(viewEditor(parts[1]));
     else if (parts[0] === 'users') app.appendChild(viewUsers());
     else app.appendChild(viewDashboard());

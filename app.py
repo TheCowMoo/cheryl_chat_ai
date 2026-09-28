@@ -150,6 +150,50 @@ def _send_webhook_async(url, payload):
     threading.Thread(target=_run, daemon=True).start()
 
 
+WEBHOOK_HINT = (
+    "\n\nYou may send data to an external system by including a line in your reply that starts "
+    "with 'WEBHOOK_PAYLOAD:' followed by a single-line JSON object. "
+    "Example: WEBHOOK_PAYLOAD: {\"name\": \"John\", \"email\": \"john@example.com\"}. "
+    "Only do this when the knowledge base instructs you to collect and send specific information."
+)
+
+
+def _parse_json_object(text):
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    for i in range(start, len(text)):
+        ch = text[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    obj = json.loads(text[start:i + 1])
+                    return obj if isinstance(obj, dict) else None
+                except Exception:
+                    return None
+    return None
+
+
+def _extract_webhook_payload(reply):
+    lines = (reply or "").split("\n")
+    payload = None
+    cleaned = []
+    for line in lines:
+        if "WEBHOOK_PAYLOAD" in line:
+            idx = line.find("WEBHOOK_PAYLOAD")
+            rest = line[idx + len("WEBHOOK_PAYLOAD"):].lstrip(": ")
+            obj = _parse_json_object(rest)
+            if obj is not None:
+                payload = obj
+            continue
+        cleaned.append(line)
+    return payload, "\n".join(cleaned).strip()
+
+
 def login_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -407,6 +451,70 @@ def bot_stats(bot_id):
 
 
 # ---------------------------------------------------------------------------
+# Conversations (for follow-up)
+# ---------------------------------------------------------------------------
+@app.route("/api/bots/<bot_id>/conversations", methods=["GET"])
+@login_required
+def list_conversations(bot_id):
+    with get_connection() as conn:
+        bot = conn.execute("SELECT id, name FROM bots WHERE id = ?", (bot_id,)).fetchone()
+        if not bot:
+            return jsonify({"error": "Not found"}), 404
+        msgs = conn.execute(
+            "SELECT conversation_id, role, content, created_at FROM messages WHERE bot_id = ? ORDER BY created_at ASC",
+            (bot_id,),
+        ).fetchall()
+
+    convs = {}
+    for m in msgs:
+        cid = m["conversation_id"]
+        c = convs.get(cid)
+        if c is None:
+            c = {"conversation_id": cid, "first_at": m["created_at"], "last_at": m["created_at"], "message_count": 0, "user_msgs": []}
+            convs[cid] = c
+        c["last_at"] = m["created_at"]
+        c["message_count"] += 1
+        if m["role"] == "user":
+            c["user_msgs"].append(m["content"])
+
+    result = []
+    for cid, c in convs.items():
+        email = name = None
+        for content in c["user_msgs"]:
+            if not email:
+                email = _extract_email(content)
+            if not name:
+                name = _extract_name(content)
+            if email and name:
+                break
+        preview = c["user_msgs"][-1] if c["user_msgs"] else ""
+        result.append({
+            "conversation_id": cid,
+            "first_at": c["first_at"],
+            "last_at": c["last_at"],
+            "message_count": c["message_count"],
+            "preview": preview[:160],
+            "lead": {"email": email, "name": name} if email else None,
+        })
+
+    result.sort(key=lambda x: x["last_at"], reverse=True)
+    return jsonify({"conversations": result, "bot": {"id": bot["id"], "name": bot["name"]}})
+
+
+@app.route("/api/bots/<bot_id>/conversations/<conv_id>", methods=["GET"])
+@login_required
+def get_conversation(bot_id, conv_id):
+    with get_connection() as conn:
+        msgs = conn.execute(
+            "SELECT role, content, created_at FROM messages WHERE bot_id = ? AND conversation_id = ? ORDER BY created_at ASC",
+            (bot_id, conv_id),
+        ).fetchall()
+    if not msgs:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify({"messages": [as_dict(m) for m in msgs]})
+
+
+# ---------------------------------------------------------------------------
 # Public endpoints (used by the widget)
 # ---------------------------------------------------------------------------
 @app.route("/api/bots/<bot_id>/public", methods=["GET"])
@@ -458,6 +566,9 @@ def chat():
             context=context or "No additional context provided.",
         )
 
+    if bot.get("webhook_url"):
+        system_content += WEBHOOK_HINT
+
     messages = [{"role": "system", "content": system_content}]
     for msg in history[-10:]:
         role = msg.get("role")
@@ -466,9 +577,12 @@ def chat():
             messages.append({"role": role, "content": content})
     messages.append({"role": "user", "content": user_message})
 
+    webhook_payload = None
     try:
         resp = client.chat.completions.create(model=MODEL, messages=messages, temperature=0.2, max_tokens=800)
-        reply = resp.choices[0].message.content
+        webhook_payload, reply = _extract_webhook_payload(resp.choices[0].message.content)
+        if not reply:
+            reply = "Got it — thanks!"
     except Exception as exc:
         app.logger.error("DeepSeek API error: %s", exc)
         return jsonify({"reply": f"Error connecting to AI: {exc}"}), 500
@@ -477,27 +591,9 @@ def chat():
         conn.execute("INSERT INTO messages (bot_id, conversation_id, role, content) VALUES (?, ?, ?, ?)", (bot_id, conversation_id, "user", user_message))
         conn.execute("INSERT INTO messages (bot_id, conversation_id, role, content) VALUES (?, ?, ?, ?)", (bot_id, conversation_id, "assistant", reply))
 
-    # Webhook lead capture: when the visitor just provided an email, POST it.
-    if bot.get("webhook_url"):
-        email = _extract_email(user_message)
-        if email:
-            name = _extract_name(user_message)
-            if not name:
-                for h in history[-5:]:
-                    if h.get("role") == "user":
-                        name = _extract_name(h.get("content"))
-                        if name:
-                            break
-            _send_webhook_async(bot["webhook_url"], {
-                "event": "lead",
-                "bot": bot["name"],
-                "bot_id": bot_id,
-                "name": name or "",
-                "email": email,
-                "message": user_message,
-                "conversation_id": conversation_id,
-                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-            })
+    # Webhook: forward the AI-constructed payload (emitted as WEBHOOK_PAYLOAD in its reply).
+    if webhook_payload is not None and bot.get("webhook_url"):
+        _send_webhook_async(bot["webhook_url"], webhook_payload)
 
     return jsonify({"reply": reply, "conversation_id": conversation_id})
 
