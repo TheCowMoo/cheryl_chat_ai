@@ -1,13 +1,9 @@
-# Custom reverse proxy for the DeepSeek AI chatbot (/api/* -> Flask on 127.0.0.1:5000).
+# Custom reverse proxy for the Chatbot Manager (Flask on 127.0.0.1:5000).
 #
-# This file is auto-included by HestiaCP's default nginx template via:
-#   include .../conf/web/<domain>/nginx.conf_*;   (HTTP server block)
+# Auto-included by HestiaCP's default nginx template inside the server {} block:
+#   include .../conf/web/<domain>/nginx.conf_*;        (HTTP)
 #
-# IMPORTANT: only "location" blocks are valid here because the file is included
-# INSIDE the existing server {} block. Do not add "server" or "listen" lines.
-#
-# After changing this file, rebuild the domain so Hestia regenerates nginx:
-#   /usr/local/hestia/bin/v-rebuild-web-domains <user> yes
+# Only "location" blocks are allowed here (no "server"/"listen" lines).
 
 location /api/ {
     proxy_pass http://127.0.0.1:5000;
@@ -21,5 +17,34 @@ location /api/ {
     proxy_cache_bypass $http_upgrade;
     proxy_read_timeout 120s;
     proxy_send_timeout 120s;
-    client_max_body_size 5m;
+    client_max_body_size 10m;
+}
+
+location /admin/ {
+    proxy_pass http://127.0.0.1:5000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+location = /admin {
+    proxy_pass http://127.0.0.1:5000;
+    proxy_set_header Host $host;
+}
+
+location = / {
+    proxy_pass http://127.0.0.1:5000;
+    proxy_set_header Host $host;
+}
+
+location = /widget.js {
+    proxy_pass http://127.0.0.1:5000;
+    proxy_set_header Host $host;
+}
+
+location = /demo {
+    proxy_pass http://127.0.0.1:5000;
+    proxy_set_header Host $host;
 }

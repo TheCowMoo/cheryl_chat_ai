@@ -8,6 +8,10 @@ venv/
 
 # Secrets / local config
 .env
+.secret_key
+
+# Runtime data (SQLite DB lives here)
+data/
 
 # OS / editor
 .DS_Store

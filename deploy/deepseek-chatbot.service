@@ -1,5 +1,5 @@
 [Unit]
-Description=DeepSeek AI Chatbot (Flask + Gunicorn)
+Description=Chatbot Manager (Flask + Gunicorn)
 After=network.target
 
 [Service]
