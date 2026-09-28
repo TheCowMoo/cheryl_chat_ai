@@ -14,7 +14,11 @@ Storage: SQLite (data/app.db). Auth: Flask signed sessions + Werkzeug password h
 
 import os
 import json
+import re
 import secrets
+import threading
+import datetime
+import urllib.request
 from functools import wraps
 
 from flask import Flask, jsonify, request, session, redirect, send_from_directory
@@ -87,6 +91,7 @@ def bot_to_dict(row, message_count=None):
         "quick_replies": json.loads(row["quick_replies"] or "[]"),
         "system_prompt": row["system_prompt"] or "",
         "knowledge_base": row["knowledge_base"] or "",
+        "webhook_url": row["webhook_url"] or "",
         "owner_id": row["owner_id"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
@@ -105,6 +110,44 @@ def load_legacy_knowledge_base():
     except Exception:
         pass
     return ""
+
+
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+NAME_PATTERNS = [
+    r"(?:my name is|name is|i am|i'm|im|this is)\s+([A-Za-z][A-Za-z' -]{1,40})",
+]
+
+
+def _extract_email(text):
+    m = EMAIL_RE.search(text or "")
+    return m.group(0).lower() if m else None
+
+
+def _extract_name(text):
+    for pat in NAME_PATTERNS:
+        m = re.search(pat, text or "", re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    return None
+
+
+def _send_webhook_sync(url, payload):
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=data, headers={"Content-Type": "application/json"}, method="POST"
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        return resp.status
+
+
+def _send_webhook_async(url, payload):
+    def _run():
+        try:
+            _send_webhook_sync(url, payload)
+        except Exception as exc:
+            app.logger.error("Webhook send failed: %s", exc)
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def login_required(f):
@@ -269,8 +312,8 @@ def create_bot():
     bot_id = new_bot_id()
     with get_connection() as conn:
         conn.execute(
-            "INSERT INTO bots (id, name, assistant_name, brand_color, logo_url, welcome_message, quick_replies, system_prompt, knowledge_base, owner_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO bots (id, name, assistant_name, brand_color, logo_url, welcome_message, quick_replies, system_prompt, knowledge_base, webhook_url, owner_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 bot_id,
                 name,
@@ -281,6 +324,7 @@ def create_bot():
                 json.dumps(data.get("quick_replies") or []),
                 (data.get("system_prompt") or "").strip(),
                 data.get("knowledge_base") or "",
+                (data.get("webhook_url") or "").strip(),
                 session.get("user_id"),
             ),
         )
@@ -307,7 +351,7 @@ def update_bot(bot_id):
         if not existing:
             return jsonify({"error": "Not found"}), 404
         conn.execute(
-            "UPDATE bots SET name=?, assistant_name=?, brand_color=?, logo_url=?, welcome_message=?, quick_replies=?, system_prompt=?, knowledge_base=?, updated_at=datetime('now') WHERE id=?",
+            "UPDATE bots SET name=?, assistant_name=?, brand_color=?, logo_url=?, welcome_message=?, quick_replies=?, system_prompt=?, knowledge_base=?, webhook_url=?, updated_at=datetime('now') WHERE id=?",
             (
                 (data.get("name") or existing["name"]).strip(),
                 (data.get("assistant_name") or existing["assistant_name"]).strip(),
@@ -317,6 +361,7 @@ def update_bot(bot_id):
                 json.dumps(data.get("quick_replies", json.loads(existing["quick_replies"] or "[]"))),
                 (data.get("system_prompt") or existing["system_prompt"]).strip(),
                 data.get("knowledge_base", existing["knowledge_base"]),
+                (data.get("webhook_url") or existing["webhook_url"] or "").strip(),
                 bot_id,
             ),
         )
@@ -431,6 +476,28 @@ def chat():
     with get_connection() as conn:
         conn.execute("INSERT INTO messages (bot_id, conversation_id, role, content) VALUES (?, ?, ?, ?)", (bot_id, conversation_id, "user", user_message))
         conn.execute("INSERT INTO messages (bot_id, conversation_id, role, content) VALUES (?, ?, ?, ?)", (bot_id, conversation_id, "assistant", reply))
+
+    # Webhook lead capture: when the visitor just provided an email, POST it.
+    if bot.get("webhook_url"):
+        email = _extract_email(user_message)
+        if email:
+            name = _extract_name(user_message)
+            if not name:
+                for h in history[-5:]:
+                    if h.get("role") == "user":
+                        name = _extract_name(h.get("content"))
+                        if name:
+                            break
+            _send_webhook_async(bot["webhook_url"], {
+                "event": "lead",
+                "bot": bot["name"],
+                "bot_id": bot_id,
+                "name": name or "",
+                "email": email,
+                "message": user_message,
+                "conversation_id": conversation_id,
+                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            })
 
     return jsonify({"reply": reply, "conversation_id": conversation_id})
 

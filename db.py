@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS bots (
     quick_replies TEXT NOT NULL DEFAULT '[]',
     system_prompt TEXT NOT NULL DEFAULT '',
     knowledge_base TEXT NOT NULL DEFAULT '',
+    webhook_url TEXT NOT NULL DEFAULT '',
     owner_id INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -55,6 +56,10 @@ def get_connection():
 def init_db():
     with get_connection() as conn:
         conn.executescript(SCHEMA)
+        # Migration: add webhook_url to existing databases created before this column existed.
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(bots)").fetchall()]
+        if "webhook_url" not in cols:
+            conn.execute("ALTER TABLE bots ADD COLUMN webhook_url TEXT NOT NULL DEFAULT ''")
 
 
 def new_bot_id():

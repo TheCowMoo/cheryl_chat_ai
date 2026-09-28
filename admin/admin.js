@@ -227,6 +227,7 @@
     var welcome = el('textarea'); welcome.placeholder = 'Hi! How can I help you today?'; welcome.style.minHeight = '64px';
     var kb = el('textarea'); kb.placeholder = 'Paste the knowledge base here…'; kb.style.minHeight = '200px';
     var prompt = el('textarea'); prompt.placeholder = 'Optional: custom AI instructions (leave blank for default)'; prompt.style.minHeight = '80px';
+    var webhook = el('input'); webhook.type = 'url'; webhook.placeholder = 'https://hooks.zapier.com/… (optional)';
 
     var quickReplies = [];
     var chipList = el('div', 'chip-list');
@@ -264,6 +265,7 @@
     form.appendChild(chipInput);
     form.appendChild(field('Knowledge base', kb, 'The AI answers ONLY from this text.'));
     form.appendChild(field('AI personality (optional)', prompt));
+    form.appendChild(field('Webhook URL', webhook, 'Optional — when a visitor sends an email, it is POSTed here as JSON'));
 
     var save = el('button', 'btn btn-primary', isNew ? 'Create Chatbot' : 'Save Changes');
     save.onclick = saveFn;
@@ -311,6 +313,7 @@
         var b = d.bot;
         name.value = b.name; assistant.value = b.assistant_name; color.value = b.brand_color; colorText.value = b.brand_color;
         logo.value = b.logo_url; welcome.value = b.welcome_message; kb.value = b.knowledge_base; prompt.value = b.system_prompt;
+        webhook.value = b.webhook_url || '';
         quickReplies = (b.quick_replies || []).slice(); renderChips();
         currentBot = b; renderPreview();
       }).catch(function (e) { toast(e.message, false); location.hash = '#/'; });
@@ -327,7 +330,8 @@
         welcome_message: welcome.value.trim(),
         quick_replies: quickReplies,
         knowledge_base: kb.value,
-        system_prompt: prompt.value.trim()
+        system_prompt: prompt.value.trim(),
+        webhook_url: webhook.value.trim()
       };
       if (!payload.name) { toast('Name is required', false); return; }
       save.disabled = true;
