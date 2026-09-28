@@ -49,7 +49,7 @@
     '.ascend-chat .ac-input textarea:focus { border-color: var(--ac, #4f46e5); }',
     '.ascend-chat .ac-send { margin-left: 8px; background: var(--ac, #4f46e5); color: #fff; border: none; border-radius: 10px; padding: 0 16px; cursor: pointer; font-weight: 600; }',
     '.ascend-chat .ac-send:disabled { opacity: .5; cursor: not-allowed; }',
-    '.ascend-chat[hidden] { display: none !important; }'
+    '.ascend-chat .ac-panel[hidden] { display: none !important; }'
   ].join('\n');
 
   function el(tag, cls, text) {
